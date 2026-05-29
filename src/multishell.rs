@@ -2,10 +2,35 @@ use crate::discover::PhpInstallation;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
+pub const PHP_BINARIES: &[&str] = &[
+    "php",
+    "php-cgi",
+    "php-config",
+    "phpize",
+    "phpdbg",
+    "phar",
+    "phar.phar",
+    "pecl",
+    "pear",
+];
+
 /// Base directory for multishell state.
 pub fn multishell_base() -> Result<PathBuf> {
     let home = dirs::home_dir().context("could not determine home directory")?;
     Ok(home.join(".local/state/phm/multishells"))
+}
+
+/// Stable alias directory — not PID-scoped, safe to add to PATH in ~/.zshenv.
+pub fn default_alias_path() -> Result<PathBuf> {
+    let home = dirs::home_dir().context("could not determine home directory")?;
+    Ok(home.join(".local/state/phm/aliases/default"))
+}
+
+/// Update the stable default alias to point to the given installation.
+/// Called by `phm env`, `phm use`, and `phm default` so the alias stays current.
+pub fn update_default_alias(installation: &PhpInstallation) -> Result<()> {
+    let alias_path = default_alias_path()?;
+    link_version(&alias_path, installation)
 }
 
 /// Create a new multishell directory for the current shell session.
@@ -40,19 +65,7 @@ pub fn link_version(multishell_path: &Path, installation: &PhpInstallation) -> R
         std::fs::create_dir_all(&bin_dir)?;
     }
 
-    // Create symlinks for all binaries in the PHP installation's bin dir
-    let binaries = [
-        "php",
-        "php-cgi",
-        "php-config",
-        "phpize",
-        "phpdbg",
-        "phar",
-        "pecl",
-        "pear",
-    ];
-
-    for binary in &binaries {
+    for binary in PHP_BINARIES {
         let source = installation.bin_dir.join(binary);
         let target = bin_dir.join(binary);
         if source.exists() {
@@ -64,13 +77,6 @@ pub fn link_version(multishell_path: &Path, installation: &PhpInstallation) -> R
                 )
             })?;
         }
-    }
-
-    // Also handle phar.phar -> phar symlink if it exists
-    let phar_phar = installation.bin_dir.join("phar.phar");
-    if phar_phar.exists() {
-        let target = bin_dir.join("phar.phar");
-        std::os::unix::fs::symlink(&phar_phar, &target)?;
     }
 
     // Write current version

@@ -4,6 +4,7 @@ mod config;
 mod discover;
 mod multishell;
 mod shell;
+mod shim;
 mod version;
 
 use clap::{Parser, Subcommand};
@@ -91,11 +92,42 @@ enum Commands {
         shell: Shell,
     },
 
+    /// Manage shim binaries for non-interactive shells
+    Shim {
+        #[command(subcommand)]
+        action: ShimAction,
+    },
+
     /// Diagnose common issues
     Doctor,
 }
 
+#[derive(Subcommand)]
+enum ShimAction {
+    /// Create shim symlinks in the shim directory
+    Create,
+    /// Print the shim bin directory path
+    Path,
+    /// Remove all shim symlinks
+    Remove,
+}
+
 fn main() {
+    let arg0 = std::env::args().next().unwrap_or_default();
+    let invoked_as = std::path::Path::new(&arg0)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+
+    if invoked_as != "phm" && multishell::PHP_BINARIES.contains(&invoked_as) {
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        if let Err(e) = shim::exec_shim(invoked_as, &args) {
+            eprintln!("phm: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
     let cli = Cli::parse();
 
     let result = match cli.command {
@@ -116,6 +148,7 @@ fn main() {
         Commands::Install { version } => commands::install::run(&version),
         Commands::Uninstall { version } => commands::uninstall::run(&version),
         Commands::Exec { version, command } => commands::exec::run(&version, &command),
+        Commands::Shim { action } => commands::shim::run(action),
         Commands::Completions { shell } => commands::completions::run(shell),
         Commands::Doctor => commands::doctor::run(),
     };

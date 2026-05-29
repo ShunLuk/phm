@@ -6,6 +6,7 @@ pub mod env;
 pub mod exec;
 pub mod install;
 pub mod list;
+pub mod shim;
 pub mod uninstall;
 pub mod use_version;
 pub mod which;

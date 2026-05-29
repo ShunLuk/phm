@@ -11,22 +11,24 @@ pub enum ShellKind {
 pub fn generate_env(
     shell: ShellKind,
     multishell_path: &Path,
+    fallback_path: &Path,
     use_on_cd: bool,
     silent: bool,
 ) -> String {
-    let path_str = multishell_path.join("bin").display().to_string();
+    let bin_path = multishell_path.join("bin").display().to_string();
+    let fallback_bin_path = fallback_path.join("bin").display().to_string();
 
     match shell {
-        ShellKind::Zsh => generate_zsh(&path_str, multishell_path, use_on_cd, silent),
-        ShellKind::Bash => generate_bash(&path_str, multishell_path, use_on_cd, silent),
-        ShellKind::Fish => generate_fish(&path_str, multishell_path, use_on_cd, silent),
+        ShellKind::Zsh => generate_zsh(&bin_path, &fallback_bin_path, multishell_path, use_on_cd, silent),
+        ShellKind::Bash => generate_bash(&bin_path, &fallback_bin_path, multishell_path, use_on_cd, silent),
+        ShellKind::Fish => generate_fish(&bin_path, &fallback_bin_path, multishell_path, use_on_cd, silent),
     }
 }
 
-fn generate_zsh(bin_path: &str, multishell_path: &Path, use_on_cd: bool, silent: bool) -> String {
+fn generate_zsh(bin_path: &str, fallback_bin_path: &str, multishell_path: &Path, use_on_cd: bool, silent: bool) -> String {
     let ms_path = multishell_path.display();
     let mut out = format!(
-        r#"export PATH="{bin_path}:$PATH"
+        r#"export PATH="{bin_path}:{fallback_bin_path}:$PATH"
 export PHM_MULTISHELL_PATH="{ms_path}"
 "#
     );
@@ -50,10 +52,10 @@ _phm_autoload_hook
     out
 }
 
-fn generate_bash(bin_path: &str, multishell_path: &Path, use_on_cd: bool, silent: bool) -> String {
+fn generate_bash(bin_path: &str, fallback_bin_path: &str, multishell_path: &Path, use_on_cd: bool, silent: bool) -> String {
     let ms_path = multishell_path.display();
     let mut out = format!(
-        r#"export PATH="{bin_path}:$PATH"
+        r#"export PATH="{bin_path}:{fallback_bin_path}:$PATH"
 export PHM_MULTISHELL_PATH="{ms_path}"
 "#
     );
@@ -77,10 +79,10 @@ __phm_cd .
     out
 }
 
-fn generate_fish(bin_path: &str, multishell_path: &Path, use_on_cd: bool, silent: bool) -> String {
+fn generate_fish(bin_path: &str, fallback_bin_path: &str, multishell_path: &Path, use_on_cd: bool, silent: bool) -> String {
     let ms_path = multishell_path.display();
     let mut out = format!(
-        r#"set -gx PATH "{bin_path}" $PATH
+        r#"set -gx PATH "{bin_path}" "{fallback_bin_path}" $PATH
 set -gx PHM_MULTISHELL_PATH "{ms_path}"
 "#
     );
@@ -106,13 +108,17 @@ mod tests {
     use super::*;
     use std::path::Path;
 
+    fn fallback_path() -> &'static Path {
+        Path::new("/tmp/phm-alias")
+    }
+
     #[test]
     fn generate_env_exports_silent_flag_for_supported_shells() {
         let path = Path::new("/tmp/phm-shell");
 
-        let zsh = generate_env(ShellKind::Zsh, path, false, true);
-        let bash = generate_env(ShellKind::Bash, path, false, true);
-        let fish = generate_env(ShellKind::Fish, path, false, true);
+        let zsh = generate_env(ShellKind::Zsh, path, fallback_path(), false, true);
+        let bash = generate_env(ShellKind::Bash, path, fallback_path(), false, true);
+        let fish = generate_env(ShellKind::Fish, path, fallback_path(), false, true);
 
         assert!(zsh.contains("export PHM_SILENT=1"));
         assert!(bash.contains("export PHM_SILENT=1"));
@@ -121,9 +127,16 @@ mod tests {
 
     #[test]
     fn generate_env_omits_silent_flag_when_disabled() {
-        let output = generate_env(ShellKind::Zsh, Path::new("/tmp/phm-shell"), true, false);
+        let output = generate_env(ShellKind::Zsh, Path::new("/tmp/phm-shell"), fallback_path(), true, false);
 
         assert!(!output.contains("PHM_SILENT"));
         assert!(output.contains("phm use --silent-if-unchanged"));
+    }
+
+    #[test]
+    fn generate_env_includes_fallback_bin_in_path() {
+        let output = generate_env(ShellKind::Zsh, Path::new("/tmp/phm-shell"), fallback_path(), false, false);
+
+        assert!(output.contains("/tmp/phm-alias/bin"));
     }
 }

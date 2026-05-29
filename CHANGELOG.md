@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.5] - 2026-05-29
+
+### Added
+
+- **Shim layer** for non-interactive shells — `phm shim create` generates lightweight symlinks (`php → phm`) that resolve the correct PHP version from the working directory at invocation time
+- When invoked as `php` (or any PHP binary), phm detects it was called via a shim and automatically resolves the version from `.php-version` / `composer.json` / default before executing the real binary
+- `phm shim create` auto-configures `~/.zshenv` so all shells (including agent and CI shells) have shims in PATH
+- `phm shim path` prints the shim directory and `phm shim remove` cleans up both shims and the `~/.zshenv` entry
+- Stable alias directory at `~/.local/state/phm/aliases/default/bin` as additional fallback
+- `phm doctor` now checks shim configuration and PATH placement
+
+Shims solve the problem where non-interactive shells (agentic tools, MCP servers, CI scripts, IDE terminals) don't run `eval "$(phm env)"` and therefore fall back to the system or Homebrew default PHP instead of the project-specific version. Interactive shells are unaffected — the per-session multishell symlinks take priority with zero overhead.
+
 ## [0.2.4] - 2026-04-14
 
 ### Added

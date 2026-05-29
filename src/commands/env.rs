@@ -2,6 +2,7 @@ use crate::config;
 use crate::discover;
 use crate::multishell;
 use crate::shell::ShellKind;
+use crate::shim;
 use crate::version::PhpVersion;
 use anyhow::Result;
 
@@ -36,13 +37,20 @@ pub fn run(shell: ShellKind, use_on_cd: bool, silent: bool) -> Result<()> {
             None => anyhow::bail!("no PHP versions found"),
         };
         multishell::link_version(&ms_path, installation)?;
+        multishell::update_default_alias(installation)?;
     }
 
     // Clean up stale multishell directories
     multishell::cleanup_stale();
 
+    // Ensure shims are up-to-date (non-fatal)
+    if let Err(e) = shim::ensure_shims() {
+        eprintln!("phm: warning: could not create shims: {}", e);
+    }
+
     // Output shell initialization code
-    let output = crate::shell::generate_env(shell, &ms_path, use_on_cd, silent);
+    let shim_path = shim::shim_dir()?;
+    let output = crate::shell::generate_env(shell, &ms_path, &shim_path, use_on_cd, silent);
     print!("{}", output);
 
     Ok(())

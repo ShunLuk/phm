@@ -68,6 +68,7 @@ pub fn run(version: Option<String>, silent_if_unchanged: bool, silent: bool) -> 
     match resolved.and_then(|v| installations.iter().find(|i| i.version == v)) {
         Some(inst) => {
             multishell::link_version(&ms_path, inst)?;
+            multishell::update_default_alias(inst)?;
             output.print_success(format!(
                 "Using {}",
                 format!("PHP {}", inst.version).hex("#777BB3").bold()
@@ -99,6 +100,7 @@ pub fn run(version: Option<String>, silent_if_unchanged: bool, silent: bool) -> 
                         && let Some(inst) = new_installations.iter().find(|i| i.version == v)
                     {
                         multishell::link_version(&ms_path, inst)?;
+                        multishell::update_default_alias(inst)?;
                         output.print_success(format!(
                             "Using {}",
                             format!("PHP {}", inst.version).hex("#777BB3").bold()

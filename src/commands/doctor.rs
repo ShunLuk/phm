@@ -1,6 +1,7 @@
 use crate::config;
 use crate::discover;
 use crate::multishell;
+use crate::shim;
 use anyhow::Result;
 use colored_text::Colorize;
 
@@ -110,6 +111,31 @@ pub fn run() -> Result<()> {
             println!("{} Composer not found", "✗".red());
             println!("  Install with: brew install composer");
             issues += 1;
+        }
+    }
+
+    // Check: shim setup
+    match shim::shim_bin_dir() {
+        Ok(shim_bin) if shim_bin.join("php").is_symlink() => {
+            println!("{} Shims active in {}", "✓".hex("#777BB3"), shim_bin.display());
+
+            if !path.contains(&shim_bin.display().to_string()) {
+                println!("{} Shim directory not in PATH", "!".yellow());
+                println!(
+                    "  Add to ~/.zshenv: export PATH=\"{}:$PATH\"",
+                    shim_bin.display()
+                );
+                issues += 1;
+            } else {
+                println!("{} Shim directory in PATH", "✓".hex("#777BB3"));
+            }
+        }
+        _ => {
+            println!(
+                "{} No shims configured (recommended for non-interactive shells)",
+                "!".yellow()
+            );
+            println!("  Run: phm shim create");
         }
     }
 
