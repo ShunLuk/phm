@@ -6,6 +6,167 @@ use anyhow::Result;
 use colored_text::Colorize;
 
 pub fn run() -> Result<()> {
+    #[cfg(target_os = "linux")]
+    return run_linux();
+
+    #[cfg(not(target_os = "linux"))]
+    return run_macos();
+}
+
+#[cfg(target_os = "linux")]
+fn run_linux() -> Result<()> {
+    let mut issues = 0;
+
+    // Check: PHP versions found
+    let installations = discover::discover_versions()?;
+    if installations.is_empty() {
+        println!("{} No PHP versions found", "✗".red());
+        println!("  Install one with: phm install 8.3");
+        println!("  Or via system package manager, then run: phm list");
+        issues += 1;
+    } else {
+        println!(
+            "{} {} PHP version(s) found: {}",
+            "✓".hex("#777BB3"),
+            installations.len(),
+            installations
+                .iter()
+                .map(|i| i.version.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    // Check: managed PHP directory
+    let managed = config::managed_php_dir()?;
+    let managed_count = if managed.exists() {
+        std::fs::read_dir(&managed)
+            .map(|d| d.flatten().count())
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    println!(
+        "{} phm-managed PHP dir: {} ({} version(s))",
+        "✓".hex("#777BB3"),
+        managed.display(),
+        managed_count
+    );
+
+    // Check: default version set
+    match config::get_default()? {
+        Some(ver) => {
+            if installations.iter().any(|i| i.version.to_string() == ver) {
+                println!("{} Default version: {}", "✓".hex("#777BB3"), ver);
+            } else {
+                println!("{} Default version {} is not installed", "✗".red(), ver);
+                issues += 1;
+            }
+        }
+        None => {
+            println!("{} No default version set", "✗".red());
+            println!("  Set one with: phm default <version>");
+            issues += 1;
+        }
+    }
+
+    // Check: PHM_MULTISHELL_PATH set
+    match std::env::var("PHM_MULTISHELL_PATH") {
+        Ok(path) => {
+            if std::path::Path::new(&path).exists() {
+                println!("{} Shell integration active", "✓".hex("#777BB3"));
+            } else {
+                println!(
+                    "{} PHM_MULTISHELL_PATH set but directory missing",
+                    "✗".red()
+                );
+                issues += 1;
+            }
+        }
+        Err(_) => {
+            println!("{} Shell integration not loaded", "✗".red());
+            println!("  Add to .zshrc/.bashrc: eval \"$(phm env --shell=zsh --use-on-cd)\"");
+            issues += 1;
+        }
+    }
+
+    // Check: composer available
+    let composer_check = std::process::Command::new("which").arg("composer").output();
+    match composer_check {
+        Ok(output) if output.status.success() => {
+            println!("{} Composer found", "✓".hex("#777BB3"));
+        }
+        _ => {
+            println!("{} Composer not found", "!".yellow());
+            println!("  Install via your package manager or: curl -sS https://getcomposer.org/installer | php");
+        }
+    }
+
+    // Check: shim setup
+    match shim::shim_bin_dir() {
+        Ok(shim_bin) if shim_bin.join("php").is_symlink() => {
+            let path = std::env::var("PATH").unwrap_or_default();
+            println!("{} Shims active in {}", "✓".hex("#777BB3"), shim_bin.display());
+
+            if !path.contains(&shim_bin.display().to_string()) {
+                println!("{} Shim directory not in PATH", "!".yellow());
+                println!(
+                    "  Add to ~/.zshenv or ~/.profile: export PATH=\"{}:$PATH\"",
+                    shim_bin.display()
+                );
+                issues += 1;
+            } else {
+                println!("{} Shim directory in PATH", "✓".hex("#777BB3"));
+            }
+        }
+        _ => {
+            println!(
+                "{} No shims configured (recommended for non-interactive shells)",
+                "!".yellow()
+            );
+            println!("  Run: phm shim create");
+        }
+    }
+
+    // Check: stale multishell dirs
+    let base = multishell::multishell_base()?;
+    if base.exists() {
+        let mut stale = 0;
+        if let Ok(entries) = std::fs::read_dir(&base) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if let Some(pid_str) = name_str.split('_').next()
+                    && let Ok(pid) = pid_str.parse::<i32>()
+                    && !multishell::is_process_alive(pid)
+                {
+                    stale += 1;
+                }
+            }
+        }
+        if stale > 0 {
+            println!(
+                "{} {} stale multishell dir(s) (cleaned up on next shell init)",
+                "!".yellow(),
+                stale
+            );
+        } else {
+            println!("{} No stale multishell directories", "✓".hex("#777BB3"));
+        }
+    }
+
+    println!();
+    if issues == 0 {
+        println!("{}", "All checks passed!".hex("#777BB3").bold());
+    } else {
+        println!("{} issue(s) found", format!("{}", issues).red().bold());
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn run_macos() -> Result<()> {
     let mut issues = 0;
     let opt_dirs = discover::homebrew_opt_dirs();
     let detected_dirs = opt_dirs

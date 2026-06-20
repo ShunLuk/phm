@@ -8,6 +8,9 @@ pub fn run() -> Result<()> {
     let installations = discover::discover_versions()?;
 
     if installations.is_empty() {
+        #[cfg(target_os = "linux")]
+        eprintln!("No PHP versions found. Install one with: phm install 8.3");
+        #[cfg(not(target_os = "linux"))]
         eprintln!("No PHP versions found. Install one with: brew install php@8.2");
         return Ok(());
     }

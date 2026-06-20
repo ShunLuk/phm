@@ -2,6 +2,8 @@ mod commands;
 mod composer;
 mod config;
 mod discover;
+#[cfg(target_os = "linux")]
+mod downloader;
 mod multishell;
 mod shell;
 mod shim;
@@ -57,6 +59,9 @@ enum Commands {
 
     /// List installed PHP versions
     List,
+
+    /// List PHP versions available to install (Linux only)
+    ListRemote,
 
     /// Show the active PHP version
     Current,
@@ -143,6 +148,7 @@ fn main() {
         } => commands::use_version::run(version, silent_if_unchanged, silent),
         Commands::Default { version } => commands::default::run(version),
         Commands::List => commands::list::run(),
+        Commands::ListRemote => commands::list_remote::run(),
         Commands::Current => commands::current::run(),
         Commands::Which => commands::which::run(),
         Commands::Install { version } => commands::install::run(&version),
