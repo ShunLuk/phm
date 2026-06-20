@@ -40,11 +40,14 @@ export PHM_MULTISHELL_PATH="{ms_path}"
         out.push_str(
             r#"autoload -U add-zsh-hook
 _phm_autoload_hook() {
-  phm use --silent-if-unchanged
-  rehash
+  if [[ -f composer.json || -f .php-version ]]; then
+    phm use --silent-if-unchanged
+  fi
 }
+add-zsh-hook -D chpwd _phm_autoload_hook
 add-zsh-hook chpwd _phm_autoload_hook
 _phm_autoload_hook
+rehash
 "#,
         );
     }
@@ -67,11 +70,15 @@ export PHM_MULTISHELL_PATH="{ms_path}"
         out.push_str(
             r#"__phm_cd() {
   \builtin cd "$@" || return
-  phm use --silent-if-unchanged
-  hash -r
+  if [[ -f composer.json || -f .php-version ]]; then
+    phm use --silent-if-unchanged
+  fi
 }
 alias cd=__phm_cd
-__phm_cd .
+if [[ -f composer.json || -f .php-version ]]; then
+  phm use --silent-if-unchanged
+fi
+hash -r
 "#,
         );
     }
@@ -93,9 +100,13 @@ set -gx PHM_MULTISHELL_PATH "{ms_path}"
     if use_on_cd {
         out.push_str(
             r#"function _phm_autoload --on-variable PWD
-  phm use --silent-if-unchanged
+  if test -f composer.json; or test -f .php-version
+    phm use --silent-if-unchanged
+  end
 end
-_phm_autoload
+if test -f composer.json; or test -f .php-version
+  _phm_autoload
+end
 "#,
         );
     }

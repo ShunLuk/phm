@@ -12,25 +12,16 @@ pub fn run(action: ShimAction) -> Result<()> {
                 path.display().to_string().hex("#777BB3").bold()
             );
 
-            match shim::inject_zshenv() {
-                Ok(true) => println!(
+            match shim::inject_shim_path() {
+                Ok(Some(target)) => println!(
                     "Added shim PATH to {}",
-                    "~/.zshenv".bold()
+                    target.display().to_string().bold()
                 ),
-                Ok(false) => println!(
-                    "Shim PATH already in {}",
-                    "~/.zshenv".bold()
-                ),
+                Ok(None) => println!("Shim PATH already configured"),
                 Err(e) => {
-                    eprintln!("phm: warning: could not update ~/.zshenv: {}", e);
-                    println!(
-                        "Add manually to {}:",
-                        "~/.zshenv".bold()
-                    );
-                    println!(
-                        "  export PATH=\"{}:$PATH\"",
-                        path.display()
-                    );
+                    eprintln!("phm: warning: could not update shell config: {}", e);
+                    println!("Add manually to ~/.zshenv or ~/.zshrc_custom:");
+                    println!("  export PATH=\"{}:$PATH\"", path.display());
                 }
             }
         }
@@ -40,7 +31,7 @@ pub fn run(action: ShimAction) -> Result<()> {
         }
         ShimAction::Remove => {
             shim::remove_shims()?;
-            if shim::remove_zshenv()? {
+            if shim::remove_shim_path()? {
                 println!("Shims removed and cleaned up {}", "~/.zshenv".bold());
             } else {
                 println!("Shims removed");
