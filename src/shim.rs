@@ -214,6 +214,86 @@ fn shim_path_candidates(home: &std::path::Path) -> Vec<PathBuf> {
     ]
 }
 
+const SHELL_EVAL_MARKER: &str = "# phm shell";
+
+fn detect_shell_name() -> &'static str {
+    let shell = std::env::var("SHELL").unwrap_or_default();
+    if shell.contains("bash") {
+        "bash"
+    } else if shell.contains("fish") {
+        "fish"
+    } else {
+        "zsh"
+    }
+}
+
+/// Inject `eval "$(phm env --shell <shell> --use-on-cd)"` into the best config file.
+/// Returns the path written to, or None if already present.
+pub fn inject_shell_eval() -> Result<Option<PathBuf>> {
+    let home = dirs::home_dir().context("could not determine home directory")?;
+    let target = find_zsh_injection_target(&home);
+    let shell = detect_shell_name();
+    let line = format!(
+        "eval \"$(phm env --shell {} --use-on-cd)\" {}",
+        shell, SHELL_EVAL_MARKER
+    );
+
+    for candidate in shell_eval_candidates(&home) {
+        if let Ok(content) = std::fs::read_to_string(&candidate) {
+            if content.contains(SHELL_EVAL_MARKER) {
+                return Ok(None);
+            }
+        }
+    }
+
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&target)?;
+
+    writeln!(file)?;
+    writeln!(file, "{}", line)?;
+
+    Ok(Some(target))
+}
+
+/// Remove the shell eval line from whichever file it was written to.
+pub fn remove_shell_eval() -> Result<bool> {
+    let home = dirs::home_dir().context("could not determine home directory")?;
+    let mut removed = false;
+
+    for candidate in shell_eval_candidates(&home) {
+        if !candidate.exists() {
+            continue;
+        }
+        let content = std::fs::read_to_string(&candidate)?;
+        if !content.contains(SHELL_EVAL_MARKER) {
+            continue;
+        }
+        let filtered: Vec<&str> = content
+            .lines()
+            .filter(|line| !line.contains(SHELL_EVAL_MARKER))
+            .collect();
+        std::fs::write(&candidate, filtered.join("\n") + "\n")?;
+        removed = true;
+    }
+
+    Ok(removed)
+}
+
+fn shell_eval_candidates(home: &std::path::Path) -> Vec<PathBuf> {
+    vec![
+        home.join(".zshrc_custom"),
+        home.join(".zshrc.local"),
+        home.join(".zsh_custom"),
+        home.join(".zsh.local"),
+        home.join(".zshrc"),
+        home.join(".bashrc"),
+        home.join(".bash_profile"),
+    ]
+}
+
 
 fn find_phm_binary() -> Result<PathBuf> {
     if let Ok(output) = std::process::Command::new("which")

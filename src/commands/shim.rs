@@ -24,6 +24,19 @@ pub fn run(action: ShimAction) -> Result<()> {
                     println!("  export PATH=\"{}:$PATH\"", path.display());
                 }
             }
+
+            match shim::inject_shell_eval() {
+                Ok(Some(target)) => println!(
+                    "Added shell integration to {}",
+                    target.display().to_string().bold()
+                ),
+                Ok(None) => println!("Shell integration already configured"),
+                Err(e) => {
+                    eprintln!("phm: warning: could not write shell eval: {}", e);
+                    println!("Add manually to ~/.zshrc_custom:");
+                    println!("  eval \"$(phm env --shell zsh --use-on-cd)\"");
+                }
+            }
         }
         ShimAction::Path => {
             let path = shim::shim_bin_dir()?;
@@ -31,8 +44,9 @@ pub fn run(action: ShimAction) -> Result<()> {
         }
         ShimAction::Remove => {
             shim::remove_shims()?;
+            shim::remove_shell_eval()?;
             if shim::remove_shim_path()? {
-                println!("Shims removed and cleaned up {}", "~/.zshenv".bold());
+                println!("Shims removed and shell config cleaned up");
             } else {
                 println!("Shims removed");
             }
