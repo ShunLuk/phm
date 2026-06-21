@@ -7,6 +7,8 @@ mod downloader;
 mod multishell;
 mod shell;
 mod shim;
+#[cfg(not(target_os = "macos"))]
+mod termux;
 mod version;
 
 use clap::{Parser, Subcommand};
@@ -118,6 +120,9 @@ enum ShimAction {
 }
 
 fn main() {
+    #[cfg(not(target_os = "macos"))]
+    termux::ensure_dns();
+
     let arg0 = std::env::args().next().unwrap_or_default();
     let invoked_as = std::path::Path::new(&arg0)
         .file_name()

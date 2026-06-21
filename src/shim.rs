@@ -93,6 +93,22 @@ pub fn exec_shim(binary_name: &str, args: &[String]) -> Result<()> {
     }
 
     use std::os::unix::process::CommandExt;
+
+    #[cfg(not(target_os = "macos"))]
+    let err = match (
+        crate::termux::needs_proot_dns_wrap().then(|| crate::termux::proot_bin()).flatten(),
+        crate::termux::resolv_conf_path(),
+    ) {
+        (Some(proot), Some(resolv)) => std::process::Command::new(&proot)
+            .arg("-b")
+            .arg(format!("{}:/etc/resolv.conf", resolv.display()))
+            .arg(&real_binary)
+            .args(args)
+            .exec(),
+        _ => std::process::Command::new(&real_binary).args(args).exec(),
+    };
+
+    #[cfg(target_os = "macos")]
     let err = std::process::Command::new(&real_binary)
         .args(args)
         .exec();

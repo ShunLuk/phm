@@ -5,6 +5,9 @@ use crate::shim;
 use anyhow::Result;
 use colored_text::Colorize;
 
+#[cfg(not(target_os = "macos"))]
+use crate::termux;
+
 pub fn run() -> Result<()> {
     #[cfg(not(target_os = "macos"))]
     return run_linux();
@@ -125,6 +128,48 @@ fn run_linux() -> Result<()> {
                 "!".yellow()
             );
             println!("  Run: phm shim create");
+        }
+    }
+
+    // Check: Termux DNS config
+    if termux::is_termux() {
+        // $PREFIX/etc/resolv.conf — needed by Termux-native PHP
+        match termux::resolv_conf_path() {
+            Some(path) if path.exists() => {
+                let has_nameserver = std::fs::read_to_string(&path)
+                    .map(|c| c.contains("nameserver"))
+                    .unwrap_or(false);
+                if has_nameserver {
+                    println!("{} Termux DNS config OK ({})", "✓".hex("#777BB3"), path.display());
+                } else {
+                    println!(
+                        "{} {} exists but has no nameservers — Termux-native PHP DNS will fail",
+                        "✗".red(),
+                        path.display()
+                    );
+                    println!("  Fix: echo 'nameserver 8.8.8.8' > {}", path.display());
+                    issues += 1;
+                }
+            }
+            Some(path) => {
+                println!(
+                    "{} {} missing — Termux-native PHP DNS will fail",
+                    "✗".red(),
+                    path.display()
+                );
+                println!("  Fix: echo 'nameserver 8.8.8.8' > {}", path.display());
+                issues += 1;
+            }
+            None => {}
+        }
+
+        // proot — needed by phm-managed static PHP (musl/c-ares reads /etc/resolv.conf)
+        if termux::needs_proot_dns_wrap() {
+            println!("{} proot available — static PHP DNS via bind-mount", "✓".hex("#777BB3"));
+        } else if termux::proot_bin().is_none() {
+            println!("{} proot not found — static PHP (phm-managed) DNS will fail", "✗".red());
+            println!("  Fix: pkg install proot");
+            issues += 1;
         }
     }
 
