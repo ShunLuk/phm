@@ -2,14 +2,14 @@ use anyhow::Result;
 use colored_text::Colorize;
 
 pub fn run() -> Result<()> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     return run_linux();
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     return run_macos();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn run_linux() -> Result<()> {
     println!("Fetching available PHP versions...");
     let minors = crate::downloader::fetch_available_minors()?;
@@ -35,11 +35,8 @@ fn run_linux() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn run_macos() -> Result<()> {
-    eprintln!(
-        "{}",
-        "list-remote is only available on Linux. On macOS, use: brew search php".yellow()
-    );
+    eprintln!("{}", "list-remote is only available on Linux/Android. On macOS, use: brew search php".yellow());
     Ok(())
 }

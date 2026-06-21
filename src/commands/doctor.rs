@@ -6,14 +6,14 @@ use anyhow::Result;
 use colored_text::Colorize;
 
 pub fn run() -> Result<()> {
-    #[cfg(target_os = "linux")]
+    #[cfg(not(target_os = "macos"))]
     return run_linux();
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     return run_macos();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 fn run_linux() -> Result<()> {
     let mut issues = 0;
 
@@ -165,7 +165,7 @@ fn run_linux() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
 fn run_macos() -> Result<()> {
     let mut issues = 0;
     let opt_dirs = discover::homebrew_opt_dirs();

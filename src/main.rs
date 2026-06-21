@@ -2,7 +2,7 @@ mod commands;
 mod composer;
 mod config;
 mod discover;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 mod downloader;
 mod multishell;
 mod shell;

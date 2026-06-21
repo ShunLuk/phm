@@ -11,18 +11,18 @@ pub struct PhpInstallation {
 }
 
 /// Discover all installed PHP versions (platform-appropriate).
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 pub fn discover_versions() -> Result<Vec<PhpInstallation>> {
     discover_linux_versions()
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
 pub fn discover_versions() -> Result<Vec<PhpInstallation>> {
     discover_homebrew_versions()
 }
 
 /// Discover PHP versions on Linux: phm-managed installs + system PHP.
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 fn discover_linux_versions() -> Result<Vec<PhpInstallation>> {
     let mut installations = Vec::new();
     let mut seen: HashSet<PhpVersion> = HashSet::new();
@@ -64,7 +64,7 @@ fn discover_linux_versions() -> Result<Vec<PhpInstallation>> {
 
 /// Return directories to scan for a system `php` binary.
 /// On Termux, $PREFIX points to /data/data/com.termux/files/usr.
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 fn system_php_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
 
@@ -86,7 +86,7 @@ fn system_php_dirs() -> Vec<PathBuf> {
 }
 
 /// Run `php --version` on a binary and parse the version from its output.
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 fn detect_php_version(binary: &Path) -> Option<PhpVersion> {
     let output = Command::new(binary).arg("--version").output().ok()?;
     if !output.status.success() {
@@ -99,7 +99,7 @@ fn detect_php_version(binary: &Path) -> Option<PhpVersion> {
     PhpVersion::parse(ver_str)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
 pub fn homebrew_prefixes() -> Vec<PathBuf> {
     let mut prefixes = Vec::new();
     let mut seen = HashSet::new();
@@ -133,7 +133,7 @@ pub fn homebrew_prefixes() -> Vec<PathBuf> {
     prefixes
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
 pub fn homebrew_opt_dirs() -> Vec<PathBuf> {
     homebrew_prefixes()
         .into_iter()
@@ -141,7 +141,7 @@ pub fn homebrew_opt_dirs() -> Vec<PathBuf> {
         .collect()
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
 fn discover_homebrew_versions() -> Result<Vec<PhpInstallation>> {
     let mut installations = Vec::new();
 
@@ -184,7 +184,7 @@ fn discover_homebrew_versions() -> Result<Vec<PhpInstallation>> {
     Ok(installations)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
 fn detect_bare_php_version(php_opt_path: &Path) -> Option<PhpVersion> {
     // /opt/homebrew/opt/php -> ../Cellar/php/8.5.4
     let resolved = std::fs::read_link(php_opt_path).ok()?;
@@ -195,7 +195,7 @@ fn detect_bare_php_version(php_opt_path: &Path) -> Option<PhpVersion> {
     PhpVersion::parse(last)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
 fn is_bare_php(bin_dir: &Path) -> bool {
     // /opt/homebrew/opt/php/bin -> parent is /opt/homebrew/opt/php -> file_name is "php"
     bin_dir
@@ -204,7 +204,7 @@ fn is_bare_php(bin_dir: &Path) -> bool {
         .is_some_and(|name| name == "php")
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
 fn deduplicate(installations: &mut Vec<PhpInstallation>) {
     let versioned: HashSet<PhpVersion> = installations
         .iter()

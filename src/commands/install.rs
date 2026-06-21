@@ -16,14 +16,14 @@ pub fn run(version_str: &str) -> Result<()> {
         return Ok(());
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     return run_linux(version);
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     return run_macos(version);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn run_linux(version: PhpVersion) -> Result<()> {
     if version.major < 8 {
         eprintln!(
@@ -80,7 +80,7 @@ fn run_linux(version: PhpVersion) -> Result<()> {
     )
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn run_macos(version: PhpVersion) -> Result<()> {
     ensure_brew_available()?;
 
@@ -139,7 +139,7 @@ fn run_macos(version: PhpVersion) -> Result<()> {
     );
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn ensure_brew_available() -> Result<()> {
     let status = std::process::Command::new("brew")
         .arg("--version")

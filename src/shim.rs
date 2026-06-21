@@ -240,7 +240,7 @@ pub fn inject_shell_eval() -> Result<Option<PathBuf>> {
 
     for candidate in shell_eval_candidates(&home) {
         if let Ok(content) = std::fs::read_to_string(&candidate) {
-            if content.contains(SHELL_EVAL_MARKER) {
+            if content.contains(SHELL_EVAL_MARKER) || content.contains("phm env") {
                 return Ok(None);
             }
         }
