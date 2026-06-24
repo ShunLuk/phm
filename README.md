@@ -50,14 +50,25 @@ Run `phm shim create` — this installs phm into your shell automatically:
 phm shim create
 ```
 
-It will detect your shell config (e.g. `~/.zshrc_custom`, `~/.zshrc.local`, or `~/.zshenv`) and write:
-- The shim `PATH` for non-interactive shells (IDEs, CI)
-- `eval "$(phm env --shell zsh --use-on-cd)"` for interactive shell integration
+It detects your current shell and writes to the appropriate config file:
+
+| Shell | Config target | What gets written |
+|---|---|---|
+| Zsh | `~/.zshenv` (or sourced custom file) | Shim `PATH` + `eval "$(phm env --shell zsh --use-on-cd)"` |
+| Bash | `~/.bashrc` (or sourced custom file) | Shim `PATH` + `eval "$(phm env --shell bash --use-on-cd)"` |
+| Fish | `~/.config/fish/conf.d/phm.fish` | Shim `PATH` + `phm env --shell fish --use-on-cd \| source` |
 
 Then open a new terminal session, or reload your config:
 
 ```sh
+# Zsh
 source ~/.zshrc
+
+# Bash
+source ~/.bashrc
+
+# Fish (restart terminal, or):
+source ~/.config/fish/conf.d/phm.fish
 ```
 
 ### Manual setup

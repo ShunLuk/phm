@@ -38,7 +38,7 @@ pub fn update_default_alias(installation: &PhpInstallation) -> Result<()> {
 pub fn create_multishell(pid: u32) -> Result<PathBuf> {
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_millis();
 
     let id = format!("{}_{}", pid, ts);
@@ -66,13 +66,7 @@ pub fn link_version(multishell_path: &Path, installation: &PhpInstallation) -> R
     }
 
     #[cfg(not(target_os = "macos"))]
-    let use_proot = crate::termux::needs_proot_dns_wrap();
-    #[cfg(not(target_os = "macos"))]
-    let proot_args: Option<(std::path::PathBuf, std::path::PathBuf)> = if use_proot {
-        crate::termux::proot_bin().zip(crate::termux::resolv_conf_path())
-    } else {
-        None
-    };
+    let proot_args = crate::termux::proot_wrap_args();
 
     for binary in PHP_BINARIES {
         let source = installation.bin_dir.join(binary);

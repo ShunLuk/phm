@@ -56,22 +56,20 @@ pub fn proot_bin() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Whether proot should be used to bind-mount a resolv.conf for PHP.
+/// If proot DNS wrapping is needed, return `(proot_bin, resolv_conf_path)`.
 ///
-/// Static PHP binaries (musl/c-ares) read /etc/resolv.conf directly. On Android
-/// /etc is a read-only symlink to /system/etc, so the file can't be created.
-/// proot can bind-mount $PREFIX/etc/resolv.conf over /etc/resolv.conf.
-pub fn needs_proot_dns_wrap() -> bool {
+/// Returns `None` when: not on Termux, /etc/resolv.conf is already readable, or proot is absent.
+pub fn proot_wrap_args() -> Option<(std::path::PathBuf, std::path::PathBuf)> {
     if !is_termux() {
-        return false;
+        return None;
     }
     let etc_resolv_ok = std::fs::read_to_string("/etc/resolv.conf")
         .map(|c| c.contains("nameserver"))
         .unwrap_or(false);
     if etc_resolv_ok {
-        return false;
+        return None;
     }
-    proot_bin().is_some()
+    proot_bin().zip(resolv_conf_path())
 }
 
 fn build_resolv_conf() -> String {

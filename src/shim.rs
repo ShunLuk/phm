@@ -95,36 +95,39 @@ pub fn exec_shim(binary_name: &str, args: &[String]) -> Result<()> {
     use std::os::unix::process::CommandExt;
 
     #[cfg(not(target_os = "macos"))]
-    let err = match (
-        crate::termux::needs_proot_dns_wrap().then(|| crate::termux::proot_bin()).flatten(),
-        crate::termux::resolv_conf_path(),
-    ) {
-        (Some(proot), Some(resolv)) => std::process::Command::new(&proot)
+    let err = match crate::termux::proot_wrap_args() {
+        Some((proot, resolv)) => std::process::Command::new(&proot)
             .arg("-b")
             .arg(format!("{}:/etc/resolv.conf", resolv.display()))
             .arg(&real_binary)
             .args(args)
             .exec(),
-        _ => std::process::Command::new(&real_binary).args(args).exec(),
+        None => std::process::Command::new(&real_binary).args(args).exec(),
     };
 
     #[cfg(target_os = "macos")]
-    let err = std::process::Command::new(&real_binary)
-        .args(args)
-        .exec();
+    let err = std::process::Command::new(&real_binary).args(args).exec();
 
     Err(err.into())
 }
 
 const ZSHENV_MARKER: &str = "# phm shims";
 
-/// Find the best file to inject the shim PATH into.
+/// Dispatch to the right injection target for the detected shell.
+fn find_injection_target(shell: &str, home: &std::path::Path) -> PathBuf {
+    match shell {
+        "bash" => find_bash_injection_target(home),
+        "fish" => home.join(".config/fish/conf.d/phm.fish"),
+        _ => find_zsh_injection_target(home),
+    }
+}
+
+/// Find the best file to inject into for zsh.
 /// Reads ~/.zshrc for sourced custom files; falls back to ~/.zshenv.
-pub fn find_zsh_injection_target(home: &std::path::Path) -> PathBuf {
+fn find_zsh_injection_target(home: &std::path::Path) -> PathBuf {
     let zshrc = home.join(".zshrc");
 
     if let Ok(content) = std::fs::read_to_string(&zshrc) {
-        // Look for lines that source a custom file from $HOME
         for line in content.lines() {
             let line = line.trim();
             if line.starts_with('#') {
@@ -141,16 +144,46 @@ pub fn find_zsh_injection_target(home: &std::path::Path) -> PathBuf {
             }
         }
 
-        // Check if any well-known custom filenames are mentioned in .zshrc
         for candidate in ["zshrc_custom", "zshrc.local", "zsh_custom", "zsh.local"] {
-            let path = home.join(format!(".{candidate}"));
             if content.contains(candidate) {
-                return path;
+                return home.join(format!(".{candidate}"));
             }
         }
     }
 
     home.join(".zshenv")
+}
+
+/// Find the best file to inject into for bash.
+/// Reads ~/.bashrc for sourced custom files; falls back to ~/.bashrc.
+fn find_bash_injection_target(home: &std::path::Path) -> PathBuf {
+    let bashrc = home.join(".bashrc");
+
+    if let Ok(content) = std::fs::read_to_string(&bashrc) {
+        for line in content.lines() {
+            let line = line.trim();
+            if line.starts_with('#') {
+                continue;
+            }
+            if let Some(path) = extract_sourced_home_path(line, home) {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                let is_custom = ["custom", "local", "extra", "personal", "private", "user", "mine"]
+                    .iter()
+                    .any(|kw| name.contains(kw));
+                if is_custom && path.starts_with(home) {
+                    return path;
+                }
+            }
+        }
+
+        for candidate in ["bashrc_custom", "bashrc.local", "bash_custom", "bash.local"] {
+            if content.contains(candidate) {
+                return home.join(format!(".{candidate}"));
+            }
+        }
+    }
+
+    bashrc
 }
 
 fn extract_sourced_home_path(line: &str, home: &std::path::Path) -> Option<PathBuf> {
@@ -171,11 +204,15 @@ fn extract_sourced_home_path(line: &str, home: &std::path::Path) -> Option<PathB
 /// Returns the path that was written to, or None if already present.
 pub fn inject_shim_path() -> Result<Option<PathBuf>> {
     let home = dirs::home_dir().context("could not determine home directory")?;
-    let target = find_zsh_injection_target(&home);
+    let shell = detect_shell_name();
+    let target = find_injection_target(shell, &home);
     let bin_dir = shim_bin_dir()?;
-    let line = format!("export PATH=\"{}:$PATH\" {}", bin_dir.display(), ZSHENV_MARKER);
+    let line = if shell == "fish" {
+        format!("set -gx PATH \"{}\" $PATH {}", bin_dir.display(), ZSHENV_MARKER)
+    } else {
+        format!("export PATH=\"{}:$PATH\" {}", bin_dir.display(), ZSHENV_MARKER)
+    };
 
-    // Already injected somewhere — check all candidates
     for candidate in shim_path_candidates(&home) {
         if let Ok(content) = std::fs::read_to_string(&candidate) {
             if content.contains(ZSHENV_MARKER) {
@@ -185,6 +222,9 @@ pub fn inject_shim_path() -> Result<Option<PathBuf>> {
     }
 
     use std::io::Write;
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -227,6 +267,10 @@ fn shim_path_candidates(home: &std::path::Path) -> Vec<PathBuf> {
         home.join(".zshrc.local"),
         home.join(".zsh_custom"),
         home.join(".zsh.local"),
+        home.join(".bashrc"),
+        home.join(".bash_profile"),
+        home.join(".config/fish/conf.d/phm.fish"),
+        home.join(".config/fish/config.fish"),
     ]
 }
 
@@ -243,16 +287,20 @@ fn detect_shell_name() -> &'static str {
     }
 }
 
-/// Inject `eval "$(phm env --shell <shell> --use-on-cd)"` into the best config file.
+/// Inject shell integration into the best config file for the detected shell.
 /// Returns the path written to, or None if already present.
 pub fn inject_shell_eval() -> Result<Option<PathBuf>> {
     let home = dirs::home_dir().context("could not determine home directory")?;
-    let target = find_zsh_injection_target(&home);
     let shell = detect_shell_name();
-    let line = format!(
-        "eval \"$(phm env --shell {} --use-on-cd)\" {}",
-        shell, SHELL_EVAL_MARKER
-    );
+    let target = find_injection_target(shell, &home);
+    let line = if shell == "fish" {
+        format!("phm env --shell fish --use-on-cd | source {}", SHELL_EVAL_MARKER)
+    } else {
+        format!(
+            "eval \"$(phm env --shell {} --use-on-cd)\" {}",
+            shell, SHELL_EVAL_MARKER
+        )
+    };
 
     for candidate in shell_eval_candidates(&home) {
         if let Ok(content) = std::fs::read_to_string(&candidate) {
@@ -263,6 +311,9 @@ pub fn inject_shell_eval() -> Result<Option<PathBuf>> {
     }
 
     use std::io::Write;
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -307,15 +358,20 @@ fn shell_eval_candidates(home: &std::path::Path) -> Vec<PathBuf> {
         home.join(".zshrc"),
         home.join(".bashrc"),
         home.join(".bash_profile"),
+        home.join(".config/fish/conf.d/phm.fish"),
+        home.join(".config/fish/config.fish"),
     ]
 }
 
 
 fn find_phm_binary() -> Result<PathBuf> {
-    if let Ok(output) = std::process::Command::new("which")
-        .arg("phm")
-        .output()
-    {
+    // current_exe() is most reliable — it's the actual binary being run, not whatever
+    // `which phm` finds in PATH (which could be a different version).
+    if let Ok(path) = std::env::current_exe() {
+        return Ok(path);
+    }
+
+    if let Ok(output) = std::process::Command::new("which").arg("phm").output() {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
@@ -324,5 +380,5 @@ fn find_phm_binary() -> Result<PathBuf> {
         }
     }
 
-    std::env::current_exe().context("could not determine phm binary path")
+    Err(anyhow::anyhow!("could not determine phm binary path"))
 }

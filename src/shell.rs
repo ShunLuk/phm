@@ -46,7 +46,10 @@ _phm_autoload_hook() {
 }
 add-zsh-hook -D chpwd _phm_autoload_hook
 add-zsh-hook chpwd _phm_autoload_hook
-_phm_autoload_hook
+if [[ "${PHM_INIT_PID:-}" != "$$" ]]; then
+  export PHM_INIT_PID="$$"
+  _phm_autoload_hook
+fi
 rehash
 "#,
         );
@@ -75,8 +78,11 @@ export PHM_MULTISHELL_PATH="{ms_path}"
   fi
 }
 alias cd=__phm_cd
-if [[ -f composer.json || -f .php-version ]]; then
-  phm use --silent-if-unchanged
+if [[ "${PHM_INIT_PID:-}" != "$$" ]]; then
+  export PHM_INIT_PID="$$"
+  if [[ -f composer.json || -f .php-version ]]; then
+    phm use --silent-if-unchanged
+  fi
 fi
 hash -r
 "#,
